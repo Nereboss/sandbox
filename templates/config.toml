@@ -42,22 +42,32 @@ persist_paths = [
   # pre-commit hook environments (avoids re-initializing on every run)
   { path = "~/.cache/pre-commit", global = true },
 
+  # BEGIN agent:claude
   # Claude Code
   { path = "~/.claude" },
   { path = "~/.claude.json", default = "{}", global = true },
   { path = "~/.claude/.credentials.json", default = "{}", global = true },
+  # END agent:claude
 
+  # BEGIN agent:codex
   # Codex
   { path = "~/.codex" },
+  # END agent:codex
 
+  # BEGIN agent:opencode
   # OpenCode
   { path = "~/.local/share/opencode/auth.json", default = "{}", global = true },
+  # END agent:opencode
 
+  # BEGIN agent:pi
   # Pi
   { path = "~/.pi" },
+  # END agent:pi
 
+  # BEGIN agent:copilot
   # Copilot
   { path = "~/.copilot" },
+  # END agent:copilot
 
   # Project dependencies - This ensures that the container has it's own node_modules, to avoid conflicts in native dependencies
   { path = "./node_modules", only_if_exists = true },
@@ -72,6 +82,7 @@ persist_paths = [
 # Strings are mounted read-write. New matching mount paths sync on exit.
 # Copy mode replaces the container path from the host at each start.
 settings = [
+  # BEGIN agent:claude
   # Claude Code
   "~/.claude/settings.json",
   "~/.claude/CLAUDE.md",
@@ -80,21 +91,30 @@ settings = [
   "~/.claude/hooks/",
   "~/.claude/scripts/",
   "~/.claude/plugins/",
+  # END agent:claude
 
+  # BEGIN agent:codex
   # Codex
   { path = "~/.codex/config.toml", mode = "copy" },
   "~/.codex/AGENTS.md",
   "~/.codex/prompts/",
   "~/.codex/rules/",
+  # END agent:codex
 
+  # BEGIN agent:opencode
   # OpenCode
   "~/.config/opencode/*",
+  # END agent:opencode
 
+  # BEGIN agent:pi
   # Pi
   "~/.pi/agent/*",
+  # END agent:pi
 
+  # BEGIN agent:copilot
   # Copilot
   "~/.copilot/config.json",
+  # END agent:copilot
 
   # Shell customization for interactive zsh shells.
   # Use this for prompt, keybindings, shell options, and interactive aliases.
@@ -244,15 +264,24 @@ allow_network = [
 # Ports - expose container ports to host
 # ports = ["8080", "3000:8080"]
 
-# Mounts - additional directories (project auto-mounted)
-# ~ expands to home dir on host, /home/sandbox in container
+# Mounts - additional host paths (project auto-mounted).
+# ~ expands to home dir on host, /home/sandbox in container.
+# Use "source:ro" for read-only or "source:rw" for read-write access.
+# Use "source:destination:ro" or "source:destination:rw" to change the target.
+# Read-only paths, including credentials, can still be read by container processes.
 mounts = [
   # Agent Skills - ~/.agents/skills is a shared directory for skills available to all agents.
   # Add your skills there to make them available inside the container.
-  "~/.agents:rw",
-  "~/.agents/skills:~/.claude/skills:ro",   # Claude Code
-  "~/.agents/skills:~/.codex/skills:ro",    # Codex
+  # Shared host skills are read-only by default. Change to :rw to allow host skill changes.
+  "~/.agents/skills:ro",
 
-  "~/.claude/ide:ro",        # Claude Code IDE integration (VS Code/Cursor lock directories)
-  "~/.codex/auth.json:ro",   # Use host Codex login. The normal browser login flow relies on localhost redirects.
+  # BEGIN agent:claude
+  "~/.agents/skills:~/.claude/skills:ro",
+  "~/.claude/ide:ro", # Claude Code IDE integration (VS Code/Cursor lock directories)
+  # END agent:claude
+
+  # BEGIN agent:codex
+  "~/.agents/skills:~/.codex/skills:ro",
+  "~/.codex/auth.json:ro", # Use host Codex login. The normal browser login flow relies on localhost redirects.
+  # END agent:codex
 ]

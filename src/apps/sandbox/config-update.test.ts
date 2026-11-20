@@ -89,6 +89,24 @@ describe("sandbox config update", () => {
     );
   });
 
+  test("shows mount changes and preserves the existing user config when skipped", async () => {
+    await using app = await setupSandboxAppTest();
+    const existing = 'mounts = ["~/.agents:rw", "~/.codex/auth.json:ro"]\n';
+    app.global.writeConfig(existing);
+    app.global.writeDockerfile("# Tools: claude\nFROM old\n");
+    app.editor.givenAvailableEditors([]);
+
+    const execution = app.cli.run("config", "update");
+    await skipChangedFile(app, "config.toml");
+    await skipChangedFile(app, "docker/Dockerfile");
+    const result = await execution;
+
+    expect(result.exitCode).toBe(0);
+    expect(result.stdout).toContain("~/.agents/skills:ro");
+    expect(result.stdout).toContain("~/.codex/auth.json:ro");
+    expect(app.workspace.readConfigFile("config.toml")).toBe(existing);
+  });
+
   test("selects project tools when Dockerfile metadata is missing", async () => {
     await using app = await setupSandboxAppTest();
     app.project.writeDockerfile("FROM custom-base\n");

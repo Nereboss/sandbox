@@ -38,6 +38,21 @@ function collectNetworkDomains(toolIds: string[]): string[] {
   );
 }
 
+const BEGIN_AGENT_BLOCK = "^ {2}# BEGIN agent:([\\w-]+)\\r?\\n";
+const BLOCK_CONTENT = "([\\s\\S]*?)";
+const END_AGENT_BLOCK = "^ {2}# END agent:\\1\\r?\\n";
+const AGENT_BLOCK = new RegExp(
+  BEGIN_AGENT_BLOCK + BLOCK_CONTENT + END_AGENT_BLOCK,
+  "gm",
+);
+
+function selectAgentConfig(template: string, toolIds: string[]): string {
+  const selected = new Set(toolIds);
+  return template.replace(AGENT_BLOCK, (match, agent: string) => {
+    return selected.has(agent) ? match : "";
+  });
+}
+
 function collectToolPersistPaths(toolIds: string[]): PersistPathInput[] {
   return resolveTools(toolIds).dependencyClosure.flatMap(
     (tool) => tool.persistPaths ?? [],
@@ -56,7 +71,8 @@ export function getUserFileDefinitions(): FileDefinition[] {
       getPath: getGlobalConfigPath,
       getTemplate: (toolIds) => {
         const domains = collectNetworkDomains(toolIds);
-        return injectAllowedDomains(CONFIG_TOML_TEMPLATE, domains);
+        const template = selectAgentConfig(CONFIG_TOML_TEMPLATE, toolIds);
+        return injectAllowedDomains(template, domains);
       },
     },
     {

@@ -12,6 +12,7 @@
 
 ### Changed
 
+- New user configurations mount shared host skills read-only and include agent settings, persistence, and host integrations only for selected agents. Existing configurations are unchanged.
 - Read all container network logs with one container command in `sandbox network logs` and `sandbox network allow` instead of one command per log. This lowers the CPU load that each call places on the host and the container, which matters most for tools that poll these commands.
 
 ## [0.73.2] - 2026-11-03

@@ -56,6 +56,135 @@ describe("file-definitions", () => {
       }
     });
 
+    const agentSelections = [
+      { name: "no agents", selected: [] },
+      { name: "Codex", selected: ["codex"] },
+      {
+        name: "Claude, OpenCode, Pi, and Copilot",
+        selected: ["claude", "opencode", "pi", "copilot"],
+      },
+    ];
+
+    it.each(agentSelections)("keeps markers only for $name", ({ selected }) => {
+      const configDef = getUserFileDefinitions()[0];
+      if (!configDef) throw new Error("Missing user config definition");
+      const generated = configDef.getTemplate(selected);
+      const agents = ["claude", "codex", "opencode", "pi", "copilot"];
+      const unselected = agents.filter((agent) => !selected.includes(agent));
+
+      for (const agent of selected) {
+        expect(generated).toContain(`# BEGIN agent:${agent}`);
+        expect(generated).toContain(`# END agent:${agent}`);
+      }
+      for (const agent of unselected) {
+        expect(generated).not.toContain(`# BEGIN agent:${agent}`);
+        expect(generated).not.toContain(`# END agent:${agent}`);
+      }
+    });
+
+    it.each(agentSelections)("limits integrations to $name", ({ selected }) => {
+      const configDef = getUserFileDefinitions()[0];
+      if (!configDef) throw new Error("Missing user config definition");
+      const agents = {
+        claude: { path: "~/.claude", setting: "~/.claude/settings.json" },
+        codex: { path: "~/.codex", setting: "~/.codex/AGENTS.md" },
+        opencode: {
+          path: "~/.local/share/opencode/auth.json",
+          setting: "~/.config/opencode/*",
+        },
+        pi: { path: "~/.pi", setting: "~/.pi/agent/*" },
+        copilot: { path: "~/.copilot", setting: "~/.copilot/config.json" },
+      };
+      const config = parseToml(configDef.getTemplate(selected)) as {
+        settings: (string | { path: string })[];
+        persist_paths: { path: string }[];
+      };
+      const integrations = Object.entries(agents);
+      const selectedIntegrations = integrations.filter(([agent]) =>
+        selected.includes(agent),
+      );
+      const unselectedIntegrations = integrations.filter(
+        ([agent]) => !selected.includes(agent),
+      );
+      const persistPaths = config.persist_paths.map((item) => item.path);
+
+      for (const [, integration] of selectedIntegrations) {
+        expect(persistPaths).toContain(integration.path);
+        expect(config.settings).toContain(integration.setting);
+      }
+      for (const [, integration] of unselectedIntegrations) {
+        expect(persistPaths).not.toContain(integration.path);
+        expect(config.settings).not.toContain(integration.setting);
+      }
+    });
+
+    it.each(agentSelections)(
+      "keeps host skills read-only with $name",
+      ({ selected }) => {
+        const configDef = getUserFileDefinitions()[0];
+        if (!configDef) throw new Error("Missing user config definition");
+        const config = parseToml(configDef.getTemplate(selected)) as {
+          mounts: string[];
+        };
+        expect(config.mounts).toContain("~/.agents/skills:ro");
+        expect(config.mounts).not.toContain("~/.agents:rw");
+      },
+    );
+
+    const agentExtras = [
+      {
+        agent: "claude",
+        persistPaths: ["~/.claude.json", "~/.claude/.credentials.json"],
+        settings: [],
+        mounts: ["~/.agents/skills:~/.claude/skills:ro", "~/.claude/ide:ro"],
+      },
+      {
+        agent: "codex",
+        persistPaths: [],
+        settings: ["~/.codex/config.toml"],
+        mounts: [
+          "~/.agents/skills:~/.codex/skills:ro",
+          "~/.codex/auth.json:ro",
+        ],
+      },
+    ];
+
+    it.each(agentExtras)(
+      "includes $agent extras only when selected",
+      (extras) => {
+        function generateConfig(agents: string[]) {
+          const configDef = getUserFileDefinitions()[0];
+          if (!configDef) throw new Error("Missing user config definition");
+          const config = parseToml(configDef.getTemplate(agents)) as {
+            mounts: string[];
+            settings: (string | { path: string })[];
+            persist_paths: { path: string }[];
+          };
+          return {
+            mounts: config.mounts,
+            settings: config.settings.flatMap((item) =>
+              typeof item === "string" ? [] : [item.path],
+            ),
+            persistPaths: config.persist_paths.map((item) => item.path),
+          };
+        }
+        const selected = generateConfig([extras.agent]);
+        const unselected = generateConfig([]);
+        for (const path of extras.persistPaths) {
+          expect(selected.persistPaths).toContain(path);
+          expect(unselected.persistPaths).not.toContain(path);
+        }
+        for (const path of extras.settings) {
+          expect(selected.settings).toContain(path);
+          expect(unselected.settings).not.toContain(path);
+        }
+        for (const mount of extras.mounts) {
+          expect(selected.mounts).toContain(mount);
+          expect(unselected.mounts).not.toContain(mount);
+        }
+      },
+    );
+
     it("paths point to the scoped sandbox config dir", () => {
       const configRoot = "/test/scoped-sandbox-config";
       const paths = runWithTestLogger(

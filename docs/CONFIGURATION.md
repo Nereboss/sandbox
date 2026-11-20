@@ -11,6 +11,8 @@ Unknown TOML keys are rejected.
 The schema describes your installed version.
 The [user template](../templates/config.toml) and [project template](../templates/project-config.toml) show setup examples.
 
+You can edit these files manually or ask [Sandbox Assist](ASSIST.md) to help you change them.
+
 ## Paths
 
 These guides use two placeholders:
