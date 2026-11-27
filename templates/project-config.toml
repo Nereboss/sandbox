@@ -32,7 +32,12 @@
 # test_no_match = [["git", "push"]]
 
 # Network
-# allow_network = ["api.internal.example.com"]
+allow_network = [
+  # {{network_rules}}
+  # Add additional hosts allowed by this project here: 
+  # "api.internal.example.com"
+  
+]
 
 # Ports
 # ports = ["3000", "5432:5432"]

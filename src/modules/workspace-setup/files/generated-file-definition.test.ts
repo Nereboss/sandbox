@@ -2,12 +2,14 @@ import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { parse as parseToml } from "smol-toml";
+import { loadTomlConfig } from "#modules/configuration/index.js";
 import { runWithTestLogger } from "#test/host-test-scope.js";
 import { cleanupTestDir, createTestDir } from "#test/utils.js";
 import { TOOL_REGISTRY } from "../tools/tool-registry.js";
 import type { FileDefinition } from "./generated-file-definition.js";
 import {
   detectExistingTools,
+  detectNetworkPolicy,
   getDockerfilePath,
   getProjectFileDefinitions,
   getUserFileDefinitions,
@@ -17,11 +19,11 @@ import {
 describe("file-definitions", () => {
   describe("getUserFileDefinitions", () => {
     it("adds only the selected agent-specific network domains", () => {
-      const configDef = getUserFileDefinitions()[0];
+      const configDef = getUserFileDefinitions("restricted")[0];
       const cases = [
         {
           toolId: "claude",
-          included: ["*.claude.com", "claude.ai"],
+          included: ["api.anthropic.com", "claude.ai", "platform.claude.com"],
           excluded: [
             "api.business.githubcopilot.com",
             "opencode.ai",
@@ -31,13 +33,18 @@ describe("file-definitions", () => {
         {
           toolId: "copilot",
           included: ["api.business.githubcopilot.com"],
-          excluded: ["*.claude.com", "claude.ai", "opencode.ai", "models.dev"],
+          excluded: [
+            "api.anthropic.com",
+            "claude.ai",
+            "opencode.ai",
+            "models.dev",
+          ],
         },
         {
           toolId: "opencode",
           included: ["opencode.ai", "models.dev"],
           excluded: [
-            "*.claude.com",
+            "api.anthropic.com",
             "claude.ai",
             "api.business.githubcopilot.com",
           ],
@@ -200,6 +207,157 @@ describe("file-definitions", () => {
     });
   });
 
+  describe("network defaults", () => {
+    function domains(
+      policy: "restricted" | "balanced" | "broad",
+      tools: string[],
+    ): string[] {
+      const definition = getUserFileDefinitions(policy)[0];
+      if (!definition) throw new Error("Missing config definition");
+      return (
+        parseToml(definition.getTemplate(tools)) as { allow_network: string[] }
+      ).allow_network;
+    }
+
+    it("restricts access to selected agents and tool dependencies", () => {
+      expect(domains("restricted", [])).toEqual([]);
+      const selected = domains("restricted", [
+        "claude",
+        "codex",
+        "copilot",
+        "pnpm",
+      ]);
+      expect(selected).toEqual(
+        expect.arrayContaining([
+          "api.anthropic.com",
+          "platform.claude.com",
+          "api.openai.com",
+          "api.business.githubcopilot.com",
+          "registry.npmjs.org",
+        ]),
+      );
+      expect(selected).not.toContain("opencode.ai");
+      expect(selected).not.toContain("index.crates.io");
+      expect(selected).toHaveLength(new Set(selected).size);
+    });
+
+    it.each([
+      ["user", getUserFileDefinitions],
+      ["project", getProjectFileDefinitions],
+    ] as const)(
+      "labels tool and policy rules in the %s config",
+      (_, definitions) => {
+        const [definition] = definitions("broad");
+        if (!definition) throw new Error("Missing config definition");
+        const content = definition.getTemplate([
+          "claude",
+          "node",
+          "bun",
+          "copilot",
+        ]);
+        expect(content).toContain('  # Claude Code\n  "api.anthropic.com",');
+        expect(content).toContain(
+          '  # Node.js + npm, Bun\n  "registry.npmjs.org",',
+        );
+        expect(content).toContain(
+          '  # Balanced: common Git hosts\n  "github.com:{22,80,443}",',
+        );
+        expect(content).toContain(
+          '  # Broad: shared cloud and developer services\n  "*.github.com",',
+        );
+        const { allow_network } = parseToml(content) as {
+          allow_network: string[];
+        };
+        expect(
+          allow_network.filter((host) => host === "registry.npmjs.org"),
+        ).toHaveLength(1);
+        expect(
+          allow_network.filter((host) => host === "api.github.com"),
+        ).toHaveLength(1);
+      },
+    );
+
+    it("adds only documented convenience hosts for each policy", () => {
+      const blockedWildcards = [
+        "*.github.com",
+        "*.githubusercontent.com",
+        "*.amazonaws.com",
+        "*.googleapis.com",
+        "*.google.com",
+        "*.azure.com",
+        "*.microsoft.com",
+      ];
+      const restricted = domains("restricted", []);
+      const balanced = domains("balanced", []);
+      const broad = domains("broad", []);
+      expect(balanced).toEqual(
+        expect.arrayContaining(["github.com:{22,80,443}", "api.github.com"]),
+      );
+      for (const host of blockedWildcards) {
+        expect(restricted).not.toContain(host);
+        expect(balanced).not.toContain(host);
+        expect(broad).toContain(host);
+      }
+    });
+
+    it("allows Gradle hosts without opening GitHub access in Restricted", () => {
+      const selected = domains("restricted", ["java", "gradle"]);
+      expect(selected).toEqual([
+        "repo.maven.apache.org",
+        "plugins.gradle.org",
+        "services.gradle.org",
+      ]);
+      for (const host of ["services.gradle.org", "plugins.gradle.org"]) {
+        expect(domains("restricted", ["java", "maven"])).not.toContain(host);
+      }
+    });
+
+    it.each(["balanced", "broad"] as const)(
+      "%s allows Gradle wrapper downloads and plugins only with Gradle selected",
+      (policy) => {
+        const selected = domains(policy, ["java", "gradle"]);
+        for (const host of ["services.gradle.org", "plugins.gradle.org"]) {
+          expect(selected).toContain(host);
+          expect(domains(policy, ["java", "maven"])).not.toContain(host);
+        }
+        expect(selected).toEqual(
+          expect.arrayContaining([
+            "github.com:{22,80,443}",
+            "release-assets.githubusercontent.com",
+          ]),
+        );
+      },
+    );
+
+    it("stores and detects each policy and validates generated rules", () => {
+      const root = createTestDir("network-policy");
+      try {
+        for (const policy of ["restricted", "balanced", "broad"] as const) {
+          const [config, dockerfile] = getUserFileDefinitions(policy);
+          if (!config || !dockerfile) throw new Error("Missing definitions");
+          const configPath = path.join(root, "config.toml");
+          const dockerPath = path.join(root, "Dockerfile");
+          fs.writeFileSync(
+            configPath,
+            config.getTemplate(["claude", "gradle"]),
+          );
+          fs.writeFileSync(
+            dockerPath,
+            dockerfile.getTemplate(["claude", "gradle"]),
+          );
+          expect(
+            runWithTestLogger(() => loadTomlConfig(configPath)),
+          ).not.toBeNull();
+          expect(
+            detectNetworkPolicy([{ ...dockerfile, getPath: () => dockerPath }]),
+          ).toBe(policy);
+        }
+      } finally {
+        cleanupTestDir(root);
+      }
+    });
+  });
+
   describe("getDockerfilePath", () => {
     it("returns path when dockerfile definition is present", () => {
       const defs: FileDefinition[] = [
@@ -356,6 +514,46 @@ describe("file-definitions", () => {
   });
 
   describe("getProjectFileDefinitions", () => {
+    const packageHosts = [
+      { tools: ["node"], hosts: ["registry.npmjs.org"] },
+      { tools: ["bun"], hosts: ["registry.npmjs.org"] },
+      { tools: ["pnpm"], hosts: ["registry.npmjs.org"] },
+      { tools: ["python"], hosts: ["pypi.org", "files.pythonhosted.org"] },
+      { tools: ["uv"], hosts: ["pypi.org", "files.pythonhosted.org"] },
+      { tools: ["go"], hosts: ["proxy.golang.org", "sum.golang.org"] },
+      { tools: ["rust"], hosts: ["index.crates.io", "static.crates.io"] },
+      { tools: ["maven"], hosts: ["repo.maven.apache.org"] },
+      { tools: ["gradle"], hosts: ["repo.maven.apache.org"] },
+      { tools: ["dotnet"], hosts: ["api.nuget.org"] },
+      { tools: ["dotnet-tools"], hosts: ["api.nuget.org"] },
+    ];
+
+    it.each(packageHosts)(
+      "adds package hosts for $tools",
+      ({ tools, hosts }) => {
+        const definition = getProjectFileDefinitions()[0];
+        if (!definition) throw new Error("Missing project config definition");
+        const config = parseToml(definition.getTemplate(tools)) as {
+          allow_network: string[];
+        };
+        expect(config.allow_network).toEqual(expect.arrayContaining(hosts));
+        expect(config.allow_network).toHaveLength(
+          new Set(config.allow_network).size,
+        );
+      },
+    );
+
+    it("does not add unrelated package hosts to a project", () => {
+      const definition = getProjectFileDefinitions()[0];
+      if (!definition) throw new Error("Missing project config definition");
+      const config = parseToml(definition.getTemplate(["node"])) as {
+        allow_network: string[];
+      };
+      expect(config.allow_network).toContain("registry.npmjs.org");
+      expect(config.allow_network).not.toContain("index.crates.io");
+      expect(config.allow_network).not.toContain("pypi.org");
+    });
+
     let testDir: string;
 
     beforeEach(() => {

@@ -4,6 +4,7 @@ import {
   getProjectDockerfilePath,
 } from "#modules/configuration/index.js";
 import { getHostEnvironment } from "#platform/environment/index.js";
+import { pathExists, readTextFile } from "#platform/filesystem/index.js";
 import { getRepoRootPath } from "#platform/git/index.js";
 import {
   promptSelectionConfirmation,
@@ -13,7 +14,12 @@ import {
   createFilesSilently,
   processFileUpdates,
 } from "../files/file-updating.js";
-import { getProjectFileDefinitions } from "../files/generated-file-definition.js";
+import {
+  detectExistingTools,
+  detectNetworkPolicy,
+  getProjectFileDefinitions,
+} from "../files/generated-file-definition.js";
+import { selectNetworkPolicy } from "../files/network-policy.js";
 import { detectProjectCapabilities } from "../tools/detection.js";
 import type { ToolDefinition } from "../tools/tool-definition.js";
 import { TOOL_REGISTRY } from "../tools/tool-registry.js";
@@ -84,9 +90,6 @@ function displayProjectNextSteps(): void {
 
 export async function initializeProject(toolIds?: string[]): Promise<void> {
   const definitions = getProjectFileDefinitions();
-  const configDefinitions = definitions.filter(
-    (definition) => definition.id === "config",
-  );
   const nonInteractive = toolIds !== undefined;
   const currentDirectory = getHostEnvironment().currentWorkingDirectory;
   if (!nonInteractive) {
@@ -98,8 +101,15 @@ export async function initializeProject(toolIds?: string[]): Promise<void> {
       default: false,
     });
     if (!customizeImage) {
+      const policy = await selectNetworkPolicy(
+        detectNetworkPolicy(definitions) ?? undefined,
+      );
+      const configDefinitions = getProjectFileDefinitions(policy).filter(
+        (definition) => definition.id === "config",
+      );
       writeStandardOutput();
-      await processFileUpdates(configDefinitions, []);
+      const { toolIds: existingToolIds } = detectExistingTools(definitions);
+      await processFileUpdates(configDefinitions, existingToolIds);
       writeStandardOutput();
       displayProjectNextSteps();
       return;
@@ -111,10 +121,31 @@ export async function initializeProject(toolIds?: string[]): Promise<void> {
     ? validateToolIds(toolIds)
     : await selectProjectTools(projectRoot, TOOL_REGISTRY);
 
+  const policy = nonInteractive
+    ? "restricted"
+    : await selectNetworkPolicy(detectNetworkPolicy(definitions) ?? undefined);
+  const selectedDefinitions = getProjectFileDefinitions(policy);
   writeStandardOutput();
-  if (nonInteractive) createFilesSilently(definitions, selectedToolIds);
-  else {
-    await processFileUpdates(definitions, selectedToolIds);
+  if (nonInteractive) {
+    const missing = selectedDefinitions.filter((definition) => {
+      const filePath = definition.getPath();
+      if (!pathExists(filePath)) return true;
+      let existing: string;
+      try {
+        existing = readTextFile(filePath);
+      } catch {
+        throw new Error(`Failed to read ${filePath}`);
+      }
+      if (existing !== definition.getTemplate(selectedToolIds)) {
+        throw new Error(
+          "Project configuration already exists. Run sandbox config update --project to review changes.",
+        );
+      }
+      return false;
+    });
+    createFilesSilently(missing, selectedToolIds);
+  } else {
+    await processFileUpdates(selectedDefinitions, selectedToolIds);
     writeStandardOutput();
   }
 

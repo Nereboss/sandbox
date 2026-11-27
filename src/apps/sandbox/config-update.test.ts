@@ -3,6 +3,11 @@ import { setupSandboxAppTest } from "./__test__/sandbox-app-test.js";
 
 type App = Awaited<ReturnType<typeof setupSandboxAppTest>>;
 
+async function chooseNetwork(app: App): Promise<void> {
+  await app.tui.waitForText("Choose a network default:");
+  await app.tui.user.enter();
+}
+
 async function openDiffActions(app: App, fileName: string): Promise<void> {
   await app.tui.waitForText(`Do you want to update ${fileName}?`);
 }
@@ -39,10 +44,15 @@ async function initializeUser(app: App, tools = "node"): Promise<void> {
   await app.tui.waitForText("Select AI agents first");
   await app.tui.user.enter();
   await reviewCapabilities(app);
+  await chooseNetwork(app);
   expect((await initialization).exitCode).toBe(0);
 
-  app.global.writeDockerfile(`# Tools: ${tools}\nFROM outdated\n`);
+  app.global.writeDockerfile(
+    `# Tools: ${tools}\n# Base network policy: balanced\nFROM outdated\n`,
+  );
   const update = app.cli.run("config", "update");
+  await openDiffActions(app, "config.toml");
+  await app.tui.user.enter();
   await openDiffActions(app, "docker/Dockerfile");
   await app.tui.user.enter();
   expect((await update).exitCode).toBe(0);
@@ -71,7 +81,9 @@ describe("sandbox config update", () => {
   test("uses known tool metadata and reports unknown tools", async () => {
     await using app = await setupSandboxAppTest();
     app.global.writeConfig("custom = 'keep'\n");
-    app.global.writeDockerfile("# Tools: node,retired-tool\nFROM old\n");
+    app.global.writeDockerfile(
+      "# Tools: node,retired-tool\n# Base network policy: balanced\nFROM old\n",
+    );
 
     const execution = app.cli.run("config", "update");
     await skipChangedFile(app, "config.toml");
@@ -81,6 +93,7 @@ describe("sandbox config update", () => {
     expect(result).toMatchObject({ exitCode: 0, stderr: "" });
     expect(result.stdout).toContain("Skipping unknown tool: retired-tool");
     expect(result.stdout).not.toContain("Configure capabilities");
+    expect(result.stdout).not.toContain("Choose a network default:");
     expect(app.workspace.readConfigFile("config.toml")).toBe(
       "custom = 'keep'\n",
     );
@@ -93,7 +106,9 @@ describe("sandbox config update", () => {
     await using app = await setupSandboxAppTest();
     const existing = 'mounts = ["~/.agents:rw", "~/.codex/auth.json:ro"]\n';
     app.global.writeConfig(existing);
-    app.global.writeDockerfile("# Tools: claude\nFROM old\n");
+    app.global.writeDockerfile(
+      "# Tools: claude\n# Base network policy: balanced\nFROM old\n",
+    );
     app.editor.givenAvailableEditors([]);
 
     const execution = app.cli.run("config", "update");
@@ -107,12 +122,43 @@ describe("sandbox config update", () => {
     expect(app.workspace.readConfigFile("config.toml")).toBe(existing);
   });
 
+  test("asks for a missing network policy and keeps skipped files unchanged", async () => {
+    await using app = await setupSandboxAppTest();
+    const config = 'allow_network = ["private.example"]\n';
+    const dockerfile = "# Tools: node\nFROM old\n";
+    app.global.writeConfig(config);
+    app.global.writeDockerfile(dockerfile);
+    app.editor.givenAvailableEditors([]);
+
+    const execution = app.cli.run("config", "update");
+    await chooseNetwork(app);
+    await skipChangedFile(app, "config.toml");
+    await skipChangedFile(app, "docker/Dockerfile");
+    const result = await execution;
+    expect(result.stdout).toContain("no valid network policy");
+    expect(app.workspace.readConfigFile("config.toml")).toBe(config);
+    expect(app.workspace.readConfigFile("docker/Dockerfile")).toBe(dockerfile);
+  });
+
+  test("cancels a missing policy choice before changing either file", async () => {
+    await using app = await setupSandboxAppTest();
+    const config = 'allow_network = ["private.example"]\n';
+    app.global.writeConfig(config);
+    app.global.writeDockerfile("# Tools: node\nFROM old\n");
+    const execution = app.cli.run("config", "update");
+    await app.tui.waitForText("Choose a network default:");
+    await app.tui.user.chord("c", { ctrl: true });
+    expect((await execution).stdout).toContain("Cancelled.");
+    expect(app.workspace.readConfigFile("config.toml")).toBe(config);
+  });
+
   test("selects project tools when Dockerfile metadata is missing", async () => {
     await using app = await setupSandboxAppTest();
     app.project.writeDockerfile("FROM custom-base\n");
 
     const execution = app.cli.run("config", "update", "--project");
     await selectNode(app);
+    await chooseNetwork(app);
     await openDiffActions(app, "docker/Dockerfile");
     await app.tui.user.enter();
     const result = await execution;
@@ -155,7 +201,9 @@ describe("sandbox config update", () => {
     await using app = await setupSandboxAppTest();
     await initializeProject(app);
     app.project.writeConfig("custom = 'replace'\n");
-    app.project.writeDockerfile("# Tools: node\nFROM keep-me\n");
+    app.project.writeDockerfile(
+      "# Tools: node\n# Base network policy: restricted\nFROM keep-me\n",
+    );
 
     const execution = app.cli.run("config", "update", "--project");
     await openDiffActions(app, "config.toml");

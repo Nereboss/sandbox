@@ -3,12 +3,11 @@ import {
   getGlobalDockerfilePath,
   getProjectConfigPath,
   getProjectDockerfilePath,
-  injectAllowedDomains,
   type PersistPathInput,
 } from "#modules/configuration/index.js";
 import { BASE_IMAGE, USER_IMAGE } from "#modules/sandbox-resources/index.js";
 import { getHostEnvironment } from "#platform/environment/index.js";
-import { pathExists } from "#platform/filesystem/index.js";
+import { pathExists, readTextFile } from "#platform/filesystem/index.js";
 import {
   readToolIdsFromDockerfile,
   validateToolIds,
@@ -16,6 +15,11 @@ import {
 import { generateDockerfile } from "../tools/dockerfile-generation.js";
 import { resolveTools } from "../tools/tool-resolution.js";
 import { injectNamedVolumePersistPaths } from "./config-template-writing.js";
+import {
+  formatNetworkRules,
+  type NetworkPolicy,
+  parseNetworkPolicy,
+} from "./network-policy.js";
 import {
   CONFIG_TOML_TEMPLATE,
   PROJECT_CONFIG_TOML_TEMPLATE,
@@ -29,13 +33,24 @@ export interface FileDefinition {
   getTemplate: (toolIds: string[]) => string;
 }
 
-/**
- * Collect all network domains from selected tools that declare allowNetwork.
- */
-function collectNetworkDomains(toolIds: string[]): string[] {
-  return resolveTools(toolIds).dependencyClosure.flatMap(
-    (tool) => tool.allowNetwork ?? [],
+function networkTemplate(
+  template: string,
+  policy: NetworkPolicy,
+  toolIds: string[],
+): string {
+  const rules = formatNetworkRules(policy, toolIds);
+  return template.replace(/^ {2}# \{\{network_rules\}\}\r?\n/m, () =>
+    rules ? `\n${rules}\n` : "",
   );
+}
+
+export function detectNetworkPolicy(
+  definitions: FileDefinition[],
+): NetworkPolicy | null {
+  const dockerfile = getDockerfilePath(definitions);
+  return dockerfile && pathExists(dockerfile)
+    ? parseNetworkPolicy(readTextFile(dockerfile))
+    : null;
 }
 
 const BEGIN_AGENT_BLOCK = "^ {2}# BEGIN agent:([\\w-]+)\\r?\\n";
@@ -62,7 +77,9 @@ function collectToolPersistPaths(toolIds: string[]): PersistPathInput[] {
 /**
  * User-level file definitions (used by init and config-update).
  */
-export function getUserFileDefinitions(): FileDefinition[] {
+export function getUserFileDefinitions(
+  policy: NetworkPolicy = "balanced",
+): FileDefinition[] {
   return [
     {
       id: "config",
@@ -70,9 +87,8 @@ export function getUserFileDefinitions(): FileDefinition[] {
       description: "Global configuration",
       getPath: getGlobalConfigPath,
       getTemplate: (toolIds) => {
-        const domains = collectNetworkDomains(toolIds);
         const template = selectAgentConfig(CONFIG_TOML_TEMPLATE, toolIds);
-        return injectAllowedDomains(template, domains);
+        return networkTemplate(template, policy, toolIds);
       },
     },
     {
@@ -86,6 +102,7 @@ export function getUserFileDefinitions(): FileDefinition[] {
           tools: resolved.dependencyClosure,
           baseImage: BASE_IMAGE,
           toolIds: resolved.directSelections.map((tool) => tool.id),
+          networkPolicy: policy,
         });
       },
     },
@@ -154,7 +171,9 @@ function getProjectBaseImage(): string {
   return pathExists(userDockerfilePath) ? USER_IMAGE : BASE_IMAGE;
 }
 
-export function getProjectFileDefinitions(): FileDefinition[] {
+export function getProjectFileDefinitions(
+  policy: NetworkPolicy = "balanced",
+): FileDefinition[] {
   return [
     {
       id: "config",
@@ -163,11 +182,11 @@ export function getProjectFileDefinitions(): FileDefinition[] {
       getPath: () =>
         getProjectConfigPath(getHostEnvironment().currentWorkingDirectory),
       getTemplate: (toolIds) => {
-        const domains = collectNetworkDomains(toolIds);
         const toolPaths = collectToolPersistPaths(toolIds);
-        const content = injectAllowedDomains(
+        const content = networkTemplate(
           PROJECT_CONFIG_TOML_TEMPLATE,
-          domains,
+          policy,
+          toolIds,
         );
         return injectNamedVolumePersistPaths(content, toolPaths);
       },
@@ -184,6 +203,7 @@ export function getProjectFileDefinitions(): FileDefinition[] {
           tools: resolved.dependencyClosure,
           baseImage: getProjectBaseImage(),
           toolIds: resolved.directSelections.map((tool) => tool.id),
+          networkPolicy: policy,
         });
       },
     },

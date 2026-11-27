@@ -6,13 +6,11 @@ export { configUpdateCommand } from "./config-update-command.js";
 /** @lintignore Public workspace setup template update API. */
 export {
   detectExistingTools,
+  detectNetworkPolicy,
   getUserFileDefinitions,
+  hasExistingConfig,
 } from "./files/generated-file-definition.js";
-export {
-  computeTemplateHashes,
-  haveTemplatesChanged,
-  saveTemplateHashes,
-} from "./files/template-hashing.js";
+export { haveTemplatesChanged } from "./files/template-hashing.js";
 /** @lintignore Public workspace setup command API. */
 export { initCommand } from "./init-command.js";
 /** @lintignore Public workspace setup asset path API. */

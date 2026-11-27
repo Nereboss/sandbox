@@ -4,11 +4,13 @@ import { isPromptCancellation } from "#shared/errors/index.js";
 import { processFileUpdates } from "./files/file-updating.js";
 import {
   detectExistingTools,
+  detectNetworkPolicy,
   type FileDefinition,
   getProjectFileDefinitions,
   getUserFileDefinitions,
   hasExistingConfig,
 } from "./files/generated-file-definition.js";
+import { selectNetworkPolicy } from "./files/network-policy.js";
 import {
   computeTemplateHashes,
   saveTemplateHashes,
@@ -69,10 +71,33 @@ export async function configUpdateCommand(
 
     writeStandardOutput("Checking for configuration updates...\n");
     const toolIds = await resolveToolIds(definitions, options);
-    await processFileUpdates(definitions, toolIds);
+    let policy = detectNetworkPolicy(definitions);
+    if (!policy) {
+      writeStandardOutput(
+        "The Dockerfile has no valid network policy. Select a default to review the generated config.",
+      );
+      policy = await selectNetworkPolicy();
+    }
+    const selectedDefinitions = options.project
+      ? getProjectFileDefinitions(policy)
+      : getUserFileDefinitions(policy);
+    const filesToUpdate =
+      options.project && !detectExistingTools(definitions).hasDockerfile
+        ? selectedDefinitions.filter(
+            (definition) => definition.id !== "dockerfile",
+          )
+        : selectedDefinitions;
+    await processFileUpdates(filesToUpdate, toolIds);
 
-    if (!options.project) {
-      saveTemplateHashes(computeTemplateHashes(toolIds));
+    const storedTools = detectExistingTools(selectedDefinitions);
+    if (
+      !options.project &&
+      detectNetworkPolicy(selectedDefinitions) === policy &&
+      storedTools.hasToolComment &&
+      storedTools.toolIds.length === toolIds.length &&
+      toolIds.every((id) => storedTools.toolIds.includes(id))
+    ) {
+      saveTemplateHashes(computeTemplateHashes(toolIds, policy));
     }
 
     writeStandardOutput(

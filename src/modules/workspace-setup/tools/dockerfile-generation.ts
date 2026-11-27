@@ -8,6 +8,7 @@ interface GeneratorOptions {
   baseImage: string;
   includeComments?: boolean;
   toolIds?: string[];
+  networkPolicy?: string;
 }
 
 interface ImageSetupPhases {
@@ -128,6 +129,8 @@ function addHeader(lines: string[], options: GeneratorOptions): void {
     if (options.toolIds) {
       lines.push(`# Tools: ${options.toolIds.join(",")}`);
     }
+    if (options.networkPolicy)
+      lines.push(`# Base network policy: ${options.networkPolicy}`);
     lines.push("# Mise registry: https://mise.jdx.dev/registry.html");
   }
   lines.push(`FROM ${options.baseImage}`, "");

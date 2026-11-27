@@ -24,6 +24,7 @@ sandbox init --project
 
 For non-interactive project tool selection, use `sandbox init --project --tools <ids>`.
 For example, `sandbox init --project --tools node,mise-env`.
+This uses Restricted network defaults and does not overwrite different existing files.
 Run `sandbox init --help` for available setup options.
 
 ## JavaScript package managers

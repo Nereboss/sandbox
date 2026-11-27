@@ -4,6 +4,7 @@ import {
   type FileDefinition,
   getUserFileDefinitions,
 } from "./generated-file-definition.js";
+import type { NetworkPolicy } from "./network-policy.js";
 
 interface TemplateHashes {
   [fileId: string]: string;
@@ -25,8 +26,14 @@ export function computeTemplateHashesForDefinitions(
   return hashes;
 }
 
-export function computeTemplateHashes(toolIds: string[]): TemplateHashes {
-  return computeTemplateHashesForDefinitions(getUserFileDefinitions(), toolIds);
+export function computeTemplateHashes(
+  toolIds: string[],
+  policy: NetworkPolicy = "balanced",
+): TemplateHashes {
+  return computeTemplateHashesForDefinitions(
+    getUserFileDefinitions(policy),
+    toolIds,
+  );
 }
 
 /** @lintignore Owner-local persisted hash reader covered by focused tests. */
@@ -57,9 +64,12 @@ export function templateHashesDiffer(
   return false;
 }
 
-export function haveTemplatesChanged(toolIds: string[]): boolean {
+export function haveTemplatesChanged(
+  toolIds: string[],
+  policy: NetworkPolicy = "balanced",
+): boolean {
   return templateHashesDiffer(
     loadStoredTemplateHashes(),
-    computeTemplateHashes(toolIds),
+    computeTemplateHashes(toolIds, policy),
   );
 }

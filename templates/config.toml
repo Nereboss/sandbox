@@ -146,119 +146,18 @@ settings = [
 # Network - allowed outbound connections (firewall enabled by default)
 # Use *.domain to match domain itself and all subdomains
 allow_network = [
-  # AI APIs
-  "*.anthropic.com",
-  "*.openai.com",
-  "*.chatgpt.com",
+  # {{network_rules}}
 
-  # Version Control
-  "*.github.com",
-  "*.githubusercontent.com",
-  "github.com:{22,80,443}",
-  "*.gitlab.com",
-  "gitlab.com:{22,80,443}",
-  "*.bitbucket.org",
-  "bitbucket.org:{22,80,443}",
-
-  # Container Registries
-  "*.docker.io",
-  "*.docker.com",
-  "*.gcr.io",
-  "ghcr.io",
-  "public.ecr.aws",
-
-  # Cloud Platforms - Google
-  "*.google.com",
-  "*.googleapis.com",
-
-  # Cloud Platforms - Microsoft/Azure
-  "*.azure.com",
-  "*.microsoft.com",
-  "*.microsoftonline.com",
-  "dot.net",
-  "*.visualstudio.com",
-
-  # Cloud Platforms - AWS/Oracle
-  "*.amazonaws.com",
-  "*.api.aws",
-  "*.oracle.com",
-  "*.java.com",
-  "*.java.net",
-
-  # Package Managers - JavaScript/Node
-  "*.npmjs.org",
-  "*.npmjs.com",
-  "*.yarnpkg.com",
-  "*.nodejs.org",
-
-  # Package Managers - Python
-  "*.pypi.org",
-  "*.pythonhosted.org",
-  "pypi.python.org",
-  "*.pypa.io",
-
-  # Package Managers - Ruby
-  "*.rubygems.org",
-  "*.ruby-lang.org",
-  "*.rubyforge.org",
-  "*.rubyonrails.org",
-  "*.rvm.io",
-
-  # Package Managers - Rust
-  "*.crates.io",
-  "rustup.rs",
-  "*.rust-lang.org",
-
-  # Package Managers - Go
-  "*.golang.org",
-  "goproxy.io",
-  "pkg.go.dev",
-
-  # Package Managers - JVM
-  "*.maven.org",
-  "jcenter.bintray.com",
-  "*.gradle.org",
-  "*.kotlin.org",
-  "*.spring.io",
-
-  # Package Managers - Other Languages
-  "*.packagist.org",
-  "*.nuget.org",
-  "*.pub.dev",
-  "*.hex.pm",
-  "*.cpan.org",
-  "*.metacpan.org",
-  "*.cocoapods.org",
-  "*.haskell.org",
-  "*.swift.org",
-
-  # Linux Distributions
-  "*.ubuntu.com",
-  "*.launchpad.net",
-
-  # Development Tools & Platforms
-  "*.k8s.io",
-  "*.hashicorp.com",
-  "*.anaconda.com",
-  "*.anaconda.org",
-  "continuum.io",
-  "*.apache.org",
-  "*.eclipse.org",
-  "*.jdx.dev",
-  "*.playwright.dev",
-
-  # Content Delivery & Mirrors
-  "*.sourceforge.net",
-  "*.packagecloud.io",
-
-  # Schema & Configuration
-  "*.json-schema.org",
-  "*.schemastore.org",
-
-  # Model Context Protocol
-  "*.modelcontextprotocol.io",
-
-  # "service.internal.example.com:*",
+  # Add only the hosts needed for your workflows. Some possible examples: 
+  # "service.internal.example.com:*"
+  # GitHub source access:
+  # "github.com:{22,80,443}",
+  # "codeload.github.com",
+  # Shared cloud services can receive data from the sandbox:
+  # "*.amazonaws.com",
+  # "*.googleapis.com",
+  # Claude optional organization sign-in: "sso.claude.com"
+  # Claude connectors route traffic via "mcp-proxy.anthropic.com".
 ]
 
 # Ports - expose container ports to host

@@ -23,6 +23,7 @@ export const pythonPreset = definePreset(python, [
       duringProjectInit: [hasPath("./pyproject.toml")],
     },
     imageSetup: { asContainerUser: [installMiseTools(["python@3.13"])] },
+    allowNetwork: ["pypi.org", "files.pythonhosted.org"],
     url: "https://www.python.org",
   },
   {
@@ -36,6 +37,7 @@ export const pythonPreset = definePreset(python, [
       duringProjectInit: [hasPath("./uv.lock")],
     },
     imageSetup: { asContainerUser: [installMiseTools(["uv@latest"])] },
+    allowNetwork: ["pypi.org", "files.pythonhosted.org"],
     url: "https://github.com/astral-sh/uv",
   },
 ]);

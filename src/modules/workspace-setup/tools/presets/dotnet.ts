@@ -25,6 +25,7 @@ const dotnetTool = {
     duringProjectInit: [hasPath("./global.json")],
   },
   imageSetup: { asContainerUser: [installMiseTools(["dotnet@9"])] },
+  allowNetwork: ["api.nuget.org"],
   url: "https://dotnet.microsoft.com",
 } satisfies ToolDefinition<typeof dotnet>;
 

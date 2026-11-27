@@ -26,6 +26,7 @@ const goTool = {
       addImagePathEntries({ prepend: ["/home/sandbox/go/bin"] }),
     ],
   },
+  allowNetwork: ["proxy.golang.org", "sum.golang.org"],
 } satisfies ToolDefinition<typeof go>;
 
 export const goPreset = definePreset(go, [goTool]);

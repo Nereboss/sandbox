@@ -12,6 +12,7 @@ Keep the corresponding `mounts` entries if you edit the generated configuration.
 
 These mounts are read-only by default.
 To allow changes to host skills, change the relevant mount to `:rw` in your user config. Ask the user explicitly before this change.
+If the user wants to keep the mounted skills read only, use a separate directory inside the sandbox to handle skill changes.
 
 Skills contain instructions, not a security boundary.
 Review shared skills before using them across projects.

@@ -25,6 +25,7 @@ export const nodeTool = {
   imageSetup: {
     asContainerUser: [installMiseTools(["node@lts"])],
   },
+  allowNetwork: ["registry.npmjs.org"],
   url: "https://nodejs.org",
 } satisfies ToolDefinition<typeof javascript>;
 
@@ -39,6 +40,7 @@ const bunTool = {
     duringProjectInit: [hasPath("./bun.lock"), hasPath("./bun.lockb")],
   },
   imageSetup: { asContainerUser: [installMiseTools(["bun@latest"])] },
+  allowNetwork: ["registry.npmjs.org"],
   url: "https://bun.sh",
 } satisfies ToolDefinition<typeof javascript>;
 

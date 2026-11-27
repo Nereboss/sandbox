@@ -1,10 +1,10 @@
 import chalk from "chalk";
 import {
-  computeTemplateHashes,
   detectExistingTools,
+  detectNetworkPolicy,
   getUserFileDefinitions,
+  hasExistingConfig,
   haveTemplatesChanged,
-  saveTemplateHashes,
 } from "#modules/workspace-setup/index.js";
 import { getLogger } from "#platform/logging/index.js";
 import {
@@ -78,12 +78,14 @@ async function performUpdate(): Promise<boolean> {
 async function handleTemplateUpdates(): Promise<boolean> {
   const definitions = getUserFileDefinitions();
   const { toolIds } = detectExistingTools(definitions);
-  const changed = haveTemplatesChanged(toolIds);
+  const policy = detectNetworkPolicy(definitions);
+  const changed =
+    hasExistingConfig(definitions) &&
+    (!policy || haveTemplatesChanged(toolIds, policy));
   if (changed) {
     writeStandardOutput("\nChecking for configuration updates...");
     await updateInstalledTemplates();
   }
-  saveTemplateHashes(computeTemplateHashes(toolIds));
   return changed;
 }
 

@@ -12,6 +12,11 @@
 
 ### Changed
 
+- Adjusted user and project initialization to offer three different network profiles: Restricted, Balanced, and Broad. For more information, see [network access](docs/NETWORK-FIREWALL.md).
+- Adjusted network configuration during initialisation so only hosts relevant to the selected tools are included.
+- Adjusted non-interactive project initialization to use the restricted network profile and no longer overwrite different existing files.
+- Existing configurations remain unchanged. To adopt the new network defaults, run `sandbox config update` or `sandbox config update --project`.
+
 - New user configurations mount shared host skills read-only and include agent settings, persistence, and host integrations only for selected agents. Existing configurations are unchanged.
 - Read all container network logs with one container command in `sandbox network logs` and `sandbox network allow` instead of one command per log. This lowers the CPU load that each call places on the host and the container, which matters most for tools that poll these commands.
 

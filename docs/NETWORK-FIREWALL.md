@@ -1,8 +1,18 @@
 # Network access
 
 Sandbox restricts outbound traffic to allowed domains.
-The generated user configuration allows many AI services, code hosts, and package registries.
-Review that list and remove services you do not need.
+
+# Base network policies
+
+During interactive user or project initialization, sandbox provides three base network default:
+
+- **Restricted** adds hosts for selected tools and their dependencies. Other workflows can need more hosts.
+- **Balanced** also allows common GitHub, GitLab, and Bitbucket hosts. These services can receive data and serve user-controlled content.
+- **Broad** also allows shared cloud and hosting wildcards, including `*.amazonaws.com` and `*.googleapis.com`. These can include user-controlled services and buckets. Broad is the weakest network boundary.
+
+# Tool specific allows
+
+For each tool configured to be available in the sandbox, some tool specific domains are allowed. These can be reviewed in the generated `allow_network` list in the user or project `config.toml`.
 
 ## Allow a service
 

@@ -5,6 +5,7 @@ import { runWithTestLogger } from "#test/host-test-scope.js";
 import { cleanupTestDir, createTestDir } from "#test/utils.js";
 import type { FileDefinition } from "./generated-file-definition.js";
 import {
+  computeTemplateHashes,
   computeTemplateHashesForDefinitions,
   loadStoredTemplateHashes,
   saveTemplateHashes,
@@ -47,6 +48,14 @@ describe("template hashing", () => {
     expect(Object.keys(hashes)).toEqual(["config", "dockerfile"]);
     expect(hashes.config).toHaveLength(64);
     expect(hashes.config).not.toBe(hashes.dockerfile);
+  });
+
+  it("includes the chosen policy in template comparisons", () => {
+    const restricted = computeTemplateHashes(["node"], "restricted");
+    const balanced = computeTemplateHashes(["node"], "balanced");
+    expect(restricted.config).not.toBe(balanced.config);
+    expect(restricted.dockerfile).not.toBe(balanced.dockerfile);
+    expect(computeTemplateHashes(["node"], "restricted")).toEqual(restricted);
   });
 
   it("round-trips hashes through the scoped data root", () => {

@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import { getUncoveredPorts } from "#modules/network/index.js";
 import { setupSandboxAppTest } from "./__test__/sandbox-app-test.js";
 
 type App = Awaited<ReturnType<typeof setupSandboxAppTest>>;
@@ -8,12 +9,18 @@ async function confirmInitialAgents(app: App): Promise<void> {
   await app.tui.user.enter();
 }
 
+async function chooseNetwork(app: App): Promise<void> {
+  await app.tui.waitForText("Choose a network default:");
+  await app.tui.user.enter();
+}
+
 async function reviewCapabilities(app: App): Promise<void> {
   await app.tui.waitForText("Configure capabilities");
   await app.tui.user.type("G");
   await app.tui.user.enter();
   await app.tui.waitForText("Review capabilities");
   await app.tui.user.enter();
+  await chooseNetwork(app);
 }
 
 async function openDiffActions(app: App, fileName: string): Promise<void> {
@@ -46,6 +53,7 @@ async function selectCapability(app: App, query: string): Promise<void> {
   await app.tui.user.enter();
   await app.tui.waitForText("Review capabilities");
   await app.tui.user.enter();
+  await chooseNetwork(app);
 }
 
 function resetNonGitProject(app: App): void {
@@ -189,6 +197,46 @@ describe("sandbox init", () => {
     expect(app.workspace.configFileExists("docker/Dockerfile")).toBe(false);
   });
 
+  test("writes the chosen broad policy and its wildcard rules", async () => {
+    await using app = await setupSandboxAppTest();
+    const execution = app.cli.run("init");
+    await confirmInitialAgents(app);
+    await app.tui.waitForText("Configure capabilities");
+    await app.tui.user.type("G");
+    await app.tui.user.enter();
+    await app.tui.waitForText("Review capabilities");
+    await app.tui.user.enter();
+    await app.tui.waitForText("Choose a network default:");
+    await app.tui.user.down();
+    await app.tui.user.enter();
+    expect((await execution).exitCode).toBe(0);
+    expect(app.workspace.readConfigFile("docker/Dockerfile")).toContain(
+      "# Base network policy: broad",
+    );
+    expect(app.workspace.readConfigFile("config.toml")).toContain(
+      '"*.amazonaws.com"',
+    );
+    const config = await app.global.readConfig();
+    expect(
+      getUncoveredPorts(
+        "bucket.amazonaws.com",
+        new Set([443]),
+        config.allowNetwork,
+      ).size,
+    ).toBe(0);
+    expect(
+      getUncoveredPorts("github.com", new Set([22, 443]), config.allowNetwork)
+        .size,
+    ).toBe(0);
+    expect(
+      getUncoveredPorts(
+        "unrelated.example",
+        new Set([443]),
+        config.allowNetwork,
+      ).size,
+    ).toBe(1);
+  });
+
   test("creates project files with explicit tools in a non-Git workspace", async () => {
     await using app = await setupSandboxAppTest();
     app.workspace.writeExecutable("claude");
@@ -226,6 +274,7 @@ describe("sandbox init", () => {
     const execution = app.cli.run("init", "--project");
     await app.tui.waitForText("Customize the project image?");
     await app.tui.user.enter();
+    await chooseNetwork(app);
 
     expect(await execution).toMatchObject({ exitCode: 0, stderr: "" });
     expect(app.workspace.projectFileExists(".sandbox/config.toml")).toBe(true);
@@ -241,10 +290,28 @@ describe("sandbox init", () => {
     const execution = app.cli.run("init", "--project");
     await app.tui.waitForText("Customize the project image?");
     await app.tui.user.enter();
+    await chooseNetwork(app);
 
     expect(await execution).toMatchObject({ exitCode: 0, stderr: "" });
     expect(app.workspace.readProjectFile(".sandbox/docker/Dockerfile")).toBe(
       "FROM custom-image\n",
+    );
+  });
+
+  test("includes registry hosts for the tools in a retained project image", async () => {
+    await using app = await setupSandboxAppTest();
+    app.project.writeDockerfile(
+      "# Tools: rust\n# Base network policy: restricted\nFROM custom-image\n",
+    );
+
+    const execution = app.cli.run("init", "--project");
+    await app.tui.waitForText("Customize the project image?");
+    await app.tui.user.enter();
+    await chooseNetwork(app);
+
+    expect(await execution).toMatchObject({ exitCode: 0, stderr: "" });
+    expect(app.workspace.readProjectFile(".sandbox/config.toml")).toContain(
+      '"index.crates.io"',
     );
   });
 
@@ -279,6 +346,7 @@ describe("sandbox init", () => {
     await app.tui.user.enter();
     await app.tui.waitForText("Review capabilities");
     await app.tui.user.enter();
+    await chooseNetwork(app);
 
     expect(await execution).toMatchObject({ exitCode: 0, stderr: "" });
     expect(
@@ -354,6 +422,7 @@ describe("sandbox init", () => {
     const acceptExecution = accepted.cli.run("init", "--project");
     await accepted.tui.waitForText("Customize the project image?");
     await accepted.tui.user.enter();
+    await chooseNetwork(accepted);
     await openDiffActions(accepted, "config.toml");
     await accepted.tui.user.enter();
     expect((await acceptExecution).exitCode).toBe(0);
@@ -370,6 +439,7 @@ describe("sandbox init", () => {
     const rejectExecution = rejected.cli.run("init", "--project");
     await rejected.tui.waitForText("Customize the project image?");
     await rejected.tui.user.enter();
+    await chooseNetwork(rejected);
     await openDiffActions(rejected, "config.toml");
     await rejected.tui.user.down();
     await rejected.tui.user.enter();
@@ -390,6 +460,7 @@ describe("sandbox init", () => {
     const execution = app.cli.run("init", "--project");
     await app.tui.waitForText("Customize the project image?");
     await app.tui.user.enter();
+    await chooseNetwork(app);
     await openDiffActions(app, "config.toml");
     await app.tui.user.chord("c", { ctrl: true });
     const result = await execution;
@@ -413,6 +484,7 @@ describe("sandbox init", () => {
     const execution = app.cli.run("init", "--project");
     await app.tui.waitForText("Customize the project image?");
     await app.tui.user.enter();
+    await chooseNetwork(app);
     await openDiffActions(app, "config.toml");
     await app.tui.waitForText("Open diff in VS Code");
     app.processes.expectStart({ match: { command: "code" } }).resolveResult({
@@ -437,7 +509,21 @@ describe("sandbox init", () => {
     const result = await app.cli.run("init", "--project", "--tools", "node");
 
     expect(result.exitCode).toBe(1);
-    expect(result.stderr).toContain("Failed to write");
+    expect(result.stderr).toContain("Failed to read");
+    expect(app.workspace.projectFileExists(".sandbox/docker/Dockerfile")).toBe(
+      false,
+    );
+  });
+
+  test("does not overwrite a customized project in non-interactive mode", async () => {
+    await using app = await setupSandboxAppTest();
+    app.project.writeConfig('allow_network = ["private.example"]\n');
+    const result = await app.cli.run("init", "--project", "--tools", "node");
+    expect(result.exitCode).toBe(1);
+    expect(result.stderr).toContain("Project configuration already exists");
+    expect(app.workspace.readProjectFile(".sandbox/config.toml")).toBe(
+      'allow_network = ["private.example"]\n',
+    );
     expect(app.workspace.projectFileExists(".sandbox/docker/Dockerfile")).toBe(
       false,
     );

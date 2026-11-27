@@ -20,6 +20,7 @@ export const rustPreset = definePreset(rust, [
       duringUserInit: [hasExecutable("rustc"), hasExecutable("cargo")],
       duringProjectInit: [hasPath("./Cargo.toml")],
     },
+    allowNetwork: ["index.crates.io", "static.crates.io"],
     imageSetup: {
       asContainerUser: [
         installMiseTools(["rust@stable"]),

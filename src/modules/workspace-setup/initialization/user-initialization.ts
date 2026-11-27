@@ -7,8 +7,10 @@ import { detectExistingAgentConfigs } from "../agent-config-copying.js";
 import { processFileUpdates } from "../files/file-updating.js";
 import {
   detectExistingTools,
+  detectNetworkPolicy,
   getUserFileDefinitions,
 } from "../files/generated-file-definition.js";
+import { selectNetworkPolicy } from "../files/network-policy.js";
 import {
   computeTemplateHashes,
   saveTemplateHashes,
@@ -106,6 +108,10 @@ export async function initializeUser(): Promise<void> {
   const selectedToolIds = await selectTools({ preSelectedIds });
 
   displaySeparator();
+  const policy = await selectNetworkPolicy(
+    detectNetworkPolicy(definitions) ?? undefined,
+  );
+  const selectedDefinitions = getUserFileDefinitions(policy);
 
   // Agent settings stay after the complete capability review.
   const detectedConfigs = detectExistingAgentConfigs();
@@ -114,10 +120,17 @@ export async function initializeUser(): Promise<void> {
     selectedToolIds,
   );
 
-  await processFileUpdates(definitions, selectedToolIds);
+  await processFileUpdates(selectedDefinitions, selectedToolIds);
 
-  // Save template hashes so future updates can detect changes
-  saveTemplateHashes(computeTemplateHashes(selectedToolIds));
+  const storedTools = detectExistingTools(selectedDefinitions);
+  if (
+    detectNetworkPolicy(selectedDefinitions) === policy &&
+    storedTools.hasToolComment &&
+    storedTools.toolIds.length === selectedToolIds.length &&
+    selectedToolIds.every((id) => storedTools.toolIds.includes(id))
+  ) {
+    saveTemplateHashes(computeTemplateHashes(selectedToolIds, policy));
+  }
 
   writeStandardOutput();
 

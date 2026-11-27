@@ -43,6 +43,8 @@ describe("sandbox update", () => {
 
   test("updates an accepted release, migrates changed templates, and prints guidance", async () => {
     await using app = await setupSandboxAppTest();
+    app.global.writeConfig('allow_network = ["keep.example"]\n');
+    app.global.writeDockerfile("# Tools: node\nFROM old\n");
     app.updates.givenPackageVersion(packageName, "2.0.0");
 
     const execution = app.cli.run("--verbose", "update");
@@ -124,7 +126,74 @@ describe("sandbox update", () => {
     );
   });
 
-  test("recognizes unchanged templates on a repeated real update", async () => {
+  test("uses the stored policy when comparing installed templates", async () => {
+    await using app = await setupSandboxAppTest();
+    const init = app.cli.run("init");
+    await app.tui.waitForText("Select AI agents first");
+    await app.tui.user.enter();
+    await app.tui.waitForText("Configure capabilities");
+    await app.tui.user.type("G");
+    await app.tui.user.enter();
+    await app.tui.waitForText("Review capabilities");
+    await app.tui.user.enter();
+    await app.tui.waitForText("Choose a network default:");
+    await app.tui.user.down();
+    await app.tui.user.enter();
+    expect((await init).exitCode).toBe(0);
+    app.updates.givenPackageVersion(packageName, "2.0.0");
+    const update = app.cli.run("update");
+    await app.tui.waitForText("Update to 2.0.0?");
+    await app.tui.user.enter();
+    const result = await update;
+    expect(result.stderr).toContain("Configuration already up to date");
+    expect(
+      app.updates
+        .operations()
+        .filter((operation) => operation.type === "binary.run"),
+    ).toHaveLength(0);
+  });
+
+  test("does not repeat a completed configuration migration", async () => {
+    await using app = await setupSandboxAppTest();
+    app.global.writeConfig('allow_network = ["old.example"]\n');
+    app.global.writeDockerfile(
+      "# Tools: node\n# Base network policy: balanced\nFROM old\n",
+    );
+    app.updates.givenPackageVersion(packageName, "2.0.0");
+
+    const first = app.cli.run("update");
+    await app.tui.waitForText("Update to 2.0.0?");
+    await app.tui.user.enter();
+    expect((await first).exitCode).toBe(0);
+    expect(
+      app.updates
+        .operations()
+        .filter((operation) => operation.type === "binary.run"),
+    ).toEqual([
+      { type: "binary.run", binaryName: "sandbox", args: ["config", "update"] },
+    ]);
+
+    const migration = app.cli.run("config", "update");
+    await app.tui.waitForText("Do you want to update config.toml?");
+    await app.tui.user.enter();
+    await app.tui.waitForText("Do you want to update docker/Dockerfile?");
+    await app.tui.user.enter();
+    expect((await migration).exitCode).toBe(0);
+
+    const second = app.cli.run("update");
+    await app.tui.waitForText("Update to 2.0.0?");
+    await app.tui.user.enter();
+    const result = await second;
+
+    expect(result.stderr).toContain("Configuration already up to date");
+    expect(
+      app.updates
+        .operations()
+        .filter((operation) => operation.type === "binary.run"),
+    ).toHaveLength(1);
+  });
+
+  test("does not migrate templates when no configuration exists", async () => {
     await using app = await setupSandboxAppTest();
     app.updates.givenPackageVersion(packageName, "2.0.0");
 
@@ -143,6 +212,6 @@ describe("sandbox update", () => {
       app.updates
         .operations()
         .filter((operation) => operation.type === "binary.run"),
-    ).toHaveLength(1);
+    ).toHaveLength(0);
   });
 });

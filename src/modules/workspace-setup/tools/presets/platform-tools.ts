@@ -26,6 +26,7 @@ export const platformToolsPreset = definePreset(platformTools, [
       duringProjectInit: [],
     },
     imageSetup: { asContainerUser: [installMiseTools(["gh@latest"])] },
+    allowNetwork: ["github.com", "api.github.com"],
     url: "https://cli.github.com",
   },
   {
@@ -38,10 +39,12 @@ export const platformToolsPreset = definePreset(platformTools, [
       duringProjectInit: [],
     },
     imageSetup: { asContainerUser: [installMiseTools(["glab@latest"])] },
+    allowNetwork: ["gitlab.com"],
     url: "https://gitlab.com/gitlab-org/cli",
   },
   {
     id: "terraform",
+    allowNetwork: ["registry.terraform.io", "releases.hashicorp.com"],
     name: "Terraform",
     description: "Infrastructure as code tool",
     category: platformTools,

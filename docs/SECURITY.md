@@ -25,8 +25,8 @@ They do not detect malicious instructions or stop destructive edits to writable 
 - An allowed service can receive any data the agent can read.
   An allowlist is not a data-loss prevention system.
 - Wildcard domains can permit data transfer in crafted subdomain names.
-- The generated configuration allows many developer services and mounts selected host agent paths, including writable `~/.agents`.
-  Review it before use.
+- The generated configuration allows different developer services based on the selected tools. Depending on the chosen [network default](NETWORK-FIREWALL.md), different other networks connections are allowed. Review the `allow_network` section of the sandbox config before use.
+- By default, shared host slills (`~/.agents`) is mounted read only, giving sandboxed agents access to the skills and all their contents.
 - The generated environment sets `MISE_TRUSTED_CONFIG_PATHS=/` for [mise](https://mise.jdx.dev/cli/trust.html).
   Repository mise configuration is trusted inside the container without a separate prompt.
   This is independent of Sandbox's `.sandbox/` trust check.
